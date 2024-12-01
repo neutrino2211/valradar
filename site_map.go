@@ -221,6 +221,7 @@ func BuildSiteMap(ccr *CCR, sm *SiteMap, url string, depth int, maxDepth int) {
 	sm.mutex.Unlock()
 
 	if depth == maxDepth || (r != nil && r.fetched) {
+		sm.spinner.Stop()
 		return
 	}
 
