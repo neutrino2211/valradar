@@ -41,7 +41,7 @@ func (v *ValRadar) Run(globals *ValRadar) error {
 	// Ensure cleanup happens
 	defer func() {
 		<-sigChan
-		print("\033[?25h")
+		print("Exiting...") // Not sure if I need the terminal input cleanup?
 		os.Exit(0)
 	}()
         
@@ -128,7 +128,7 @@ type ValradarPlugin struct {
 func main() {
         // wip: loading plugins
 	plugin := ValradarPlugin{}
-	err := goinvoke.Unmarshal("plugins/test_c/c_plugin.dylib", &plugin)
+	goinvoke.Unmarshal("plugins/test_c/c_plugin.dylib", &plugin)
 
 	ctx := kong.Parse(
 		&ValRadar{},
@@ -136,7 +136,7 @@ func main() {
 		kong.Description("Search for patterns and strings over a website's footprint"),
 		kong.UsageOnError(),
 	)
-	err = ctx.Run()
+	err := ctx.Run()
 	if err != nil {
 		panic(err)
 	}
