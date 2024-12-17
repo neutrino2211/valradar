@@ -3,5 +3,52 @@
 > [!WARNING]  
 > This tool is in a beta state, although little changes are to be expected proceed with caution.
 
-<img src="docs/icon.png" alt="valradar icon" width="200"/>
+<p align="center">
+    <img src="docs/icon.png" alt="valradar icon" width="200"/>
+</p>
 
+Valradar is an offensive security tool designed to enable security researchers to quickly look for certain values en-masse.
+The following types of uses are currently supported:
+
+[x] Webpages
+[ ] Executables (planned)
+
+### Usage
+
+```sh
+Usage: valradar --site=STRING --pattern=STRING [flags]
+
+Search for patterns and strings over a website's footprint
+
+Flags:
+  -h, --help                    Show context-sensitive help.
+  -s, --site=STRING             The website to scan
+  -d, --depth=1                 How deep to search
+  -c, --concurrency=10          How many coroutines to use
+  -p, --pattern=STRING          The regex pattern to try matching
+      --use-headless-browser    Use a headless chrome browser to fetch the webpages
+```
+
+Scanning a website can be done as follows:
+
+```sh
+go run . --site https://facebook.com --pattern "(M|m)eta"
+```
+
+To improve results on websites with a lot of javascript, use a headless browser. __NOTE: THIS REQUIRES PLAYWRIGHT DEPENDENCIES TO BE INSTALLED__
+
+```sh
+go run . --site https://facebook.com --pattern "(M|m)eta" --use-headless-browser
+```
+
+To improve performance, increase concurrency but be aware that this value is dependent on the performance of the computer running it.
+
+```sh
+go run . --site https://facebook.com --pattern "(M|m)eta" -c 25 --use-headless-browser
+```
+
+To search deeper into a website, set the depth option to a number you desire. The behaviour is for the program to scan further into reconvered links for each increase of the depth number
+
+```sh
+go run . --site https://facebook.com --pattern "(M|m)eta" -c 25 --use-headless-browser -d 20
+```
