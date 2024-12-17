@@ -59,13 +59,13 @@ To search deeper into a website, set the depth option to a number you desire. Th
 go run . --site https://facebook.com --pattern "(M|m)eta" -c 25 --use-headless-browser -d 20
 ```
 
-[contributors-shield]: https://img.shields.io/github/contributorm/neutrino2211/valradar?style=for-the-badge
+[contributors-shield]: https://img.shields.io/github/contributors/neutrino2211/valradar?style=for-the-badge
 [contributors-url]: https://github.com/neutrino2211/valradar/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forkm/neutrino2211/valradar?style=for-the-badge
+[forks-shield]: https://img.shields.io/github/forks/neutrino2211/valradar?style=for-the-badge
 [forks-url]: https://github.com/neutrino2211/valradar/network/members
-[stars-shield]: https://img.shields.io/github/starm/neutrino2211/valradar?style=for-the-badge
+[stars-shield]: https://img.shields.io/github/stars/neutrino2211/valradar?style=for-the-badge
 [stars-url]: https://github.com/neutrino2211/valradar/stargazers
-[issues-shield]: https://img.shields.io/github/issuem/neutrino2211/valradar?style=for-the-badge
+[issues-shield]: https://img.shields.io/github/issues/neutrino2211/valradar?style=for-the-badge
 [issues-url]: https://github.com/neutrino2211/valradar/issues
-[license-shield]: https://img.shields.io/github/licensm/neutrino2211/valradar?style=for-the-badge
+[license-shield]: https://img.shields.io/github/license/neutrino2211/valradar?style=for-the-badge
 [license-url]: https://github.com/neutrino2211/valradar/blob/master/LICENSE.txt
