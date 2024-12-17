@@ -68,4 +68,4 @@ go run . --site https://facebook.com --pattern "(M|m)eta" -c 25 --use-headless-b
 [issues-shield]: https://img.shields.io/github/issues/neutrino2211/valradar?style=for-the-badge
 [issues-url]: https://github.com/neutrino2211/valradar/issues
 [license-shield]: https://img.shields.io/github/license/neutrino2211/valradar?style=for-the-badge
-[license-url]: https://github.com/neutrino2211/valradar/blob/master/LICENSE.txt
+[license-url]: https://github.com/neutrino2211/valradar/blob/master/LICENSE
