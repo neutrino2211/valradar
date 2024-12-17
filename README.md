@@ -14,7 +14,10 @@
 [![License][license-shield]][license-url]
 
 Valradar is an offensive security tool designed to enable security researchers to quickly look for certain values en-masse using regex.
+
 <br/>
+<br/>
+
 The following types of uses are currently supported:
 
 - [x] Webpages
