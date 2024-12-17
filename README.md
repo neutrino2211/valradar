@@ -7,11 +7,17 @@
     <img src="docs/icon.png" alt="valradar icon" width="200"/>
 </p>
 
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![License][license-shield]][license-url]
+
 Valradar is an offensive security tool designed to enable security researchers to quickly look for certain values en-masse.
 The following types of uses are currently supported:
 
-[x] Webpages
-[ ] Executables (planned)
+- [x] Webpages
+- [ ] Executables (planned)
 
 ### Usage
 
@@ -52,3 +58,14 @@ To search deeper into a website, set the depth option to a number you desire. Th
 ```sh
 go run . --site https://facebook.com --pattern "(M|m)eta" -c 25 --use-headless-browser -d 20
 ```
+
+[contributors-shield]: https://img.shields.io/github/contributorm/neutrino2211/valradar?style=for-the-badge
+[contributors-url]: https://github.com/neutrino2211/valradar/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forkm/neutrino2211/valradar?style=for-the-badge
+[forks-url]: https://github.com/neutrino2211/valradar/network/members
+[stars-shield]: https://img.shields.io/github/starm/neutrino2211/valradar?style=for-the-badge
+[stars-url]: https://github.com/neutrino2211/valradar/stargazers
+[issues-shield]: https://img.shields.io/github/issuem/neutrino2211/valradar?style=for-the-badge
+[issues-url]: https://github.com/neutrino2211/valradar/issues
+[license-shield]: https://img.shields.io/github/licensm/neutrino2211/valradar?style=for-the-badge
+[license-url]: https://github.com/neutrino2211/valradar/blob/master/LICENSE.txt
