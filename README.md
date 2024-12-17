@@ -13,6 +13,8 @@
 [![Issues][issues-shield]][issues-url]
 [![License][license-shield]][license-url]
 
+https://github.com/user-attachments/assets/a6b5b149-839f-402a-811d-e049ff01fd73
+
 ![Demo video](docs/demo.mp4)
 
 Valradar is an offensive security tool designed to enable security researchers to quickly look for certain values en-masse using regex.
@@ -32,6 +34,10 @@ Search for patterns and strings over a website's footprint
 
 Flags:
   -h, --help                    Show context-sensitive help.
+
+https://github.com/user-attachments/assets/d646d03c-c5a8-4cdf-b7db-48240a03dee2
+
+
   -s, --site=STRING             The website to scan
   -d, --depth=1                 How deep to search
   -c, --concurrency=10          How many coroutines to use
