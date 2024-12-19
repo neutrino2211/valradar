@@ -64,13 +64,19 @@ func (v *ValRadar) Run(globals *ValRadar) error {
 
 	found := 0
 
-	for p, r := range sm.resources {
-		matches := re.FindAllString(r.content, -1)
+        for p, r := range sm.resources {
+            ccr.start(func () {
+                println("Searching " + p + "...")
+                matches := re.FindAllString(r.content, -1)
 		for _, match := range matches {
 			found += 1
 			fmt.Println("🔎 Found " + color.HiGreenString(match) + " at the url " + color.GreenString(p))
 		}
-	}
+            })
+        }
+        
+        ccr.wait()
+        //sm.spinner.Stop()
 
 	if found == 0 {
 		fmt.Println(color.RedString("No matches found for " + globals.Regex))

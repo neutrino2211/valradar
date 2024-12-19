@@ -123,11 +123,10 @@ func processNode(ccr *CCR, sm *SiteMap, r *[]*WebResource, u string, n *html.Nod
 	fetchHtml := sm.getFetcher()
 
 	switch n.Data {
-	case "a":
-	case "link":
+	case "link", "a":
 		for _, attr := range n.Attr {
 			if attr.Key == "href" && len(attr.Val) > 1 {
-				if attr.Val[0] == '/' && attr.Val[1] != '/' {
+                                if attr.Val[0] == '/' && attr.Val[1] != '/' {
 					attr.Val = parsedUrl.Scheme + "://" + domain + attr.Val
 				} else if attr.Val[0] == '/' && attr.Val[1] == '/' {
 					attr.Val = parsedUrl.Scheme + ":" + attr.Val
@@ -187,9 +186,8 @@ func processNode(ccr *CCR, sm *SiteMap, r *[]*WebResource, u string, n *html.Nod
 
 	// Traverse child nodes
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		ccr.start(func() {
-			processNode(ccr, sm, r, u, c)
-		})
+        	processNode(ccr, sm, r, u, c)
+                //println(c.Data)
 	}
 }
 
