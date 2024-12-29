@@ -20,6 +20,7 @@ import (
 var browser playwright.Browser
 
 type ValRadar struct {
+        Debug bool `short:"!" name:"debug" name:"Show debug messaging"`
 	Site               string `required short:"s" name:"site" help:"The website to scan"`
 	Depth              uint   `short:"d" name:"depth" help:"How deep to search" default:"1"`
 	Concurrency        uint   `short:"c" name:"concurrency" help:"How many coroutines to use" default:"10"`
@@ -30,7 +31,7 @@ type ValRadar struct {
 func (v *ValRadar) Run(globals *ValRadar) error {
 	re := result.SomePair(regexp.Compile(globals.Regex)).Expect("unable to compile the regex pattern " + globals.Regex)
 	sm := NewSiteMap(globals.Site)
-	ccr := NewCCR(int(globals.Concurrency))
+	ccr := NewCCR(int(globals.Concurrency), globals.Debug)
 
 	stateStorage := ""
 
@@ -64,14 +65,18 @@ func (v *ValRadar) Run(globals *ValRadar) error {
 
 	found := 0
 
+        println("Starting search...")
+
         for p, r := range sm.resources {
-            ccr.start(func () {
-                println("Searching " + p + "...")
-                matches := re.FindAllString(r.content, -1)
-		for _, match := range matches {
-			found += 1
-			fmt.Println("🔎 Found " + color.HiGreenString(match) + " at the url " + color.GreenString(p))
-		}
+            ccr.start(&CCRJob{
+                routine: func () {
+                    matches := re.FindAllString(r.content, -1)
+        	    for _, match := range matches {
+        		found += 1
+        		fmt.Println("🔎 Found " + color.HiGreenString(match) + " at the url " + color.GreenString(p))
+            	    }
+                },
+                name: "Searching " + p,
             })
         }
         

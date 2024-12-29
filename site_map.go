@@ -81,21 +81,35 @@ type CCR struct {
 	capacity  *int
 	semaphore chan struct{}
 	mutex     *sync.Mutex
+        isLoggingEnabled bool
 }
 
-func (ccr *CCR) limited(job func()) {
-	ccr.semaphore <- struct{}{} // acquire
+type CCRJob struct {
+        name string
+        routine func()
+}
+
+func (ccr *CCR) log(msg string) {
+    if ccr.isLoggingEnabled {
+        println("\nDEBUG:", msg)
+    }
+}
+
+func (ccr *CCR) limited(job *CCRJob) {
 	ccr.mutex.Lock()
 	*ccr.capacity -= 1
 	ccr.mutex.Unlock()
-	job()           // a job
+	ccr.log("Acquiring lock for: " + job.name)
+        ccr.semaphore <- struct{}{} // acquire
+	job.routine()           // a job
 	<-ccr.semaphore // release
+        ccr.log("Releasing lock for: " + job.name)
 	ccr.mutex.Lock()
 	*ccr.capacity += 1
 	ccr.mutex.Unlock()
 }
 
-func (ccr *CCR) start(job func()) {
+func (ccr *CCR) start(job *CCRJob) {
 	go ccr.limited(job)
 }
 
@@ -103,16 +117,17 @@ func (ccr *CCR) wait() {
 	time.Sleep(1 * time.Second)
 	for *ccr.capacity < ccr.size {
 		time.Sleep(100 * time.Millisecond)
-		// println(*ccr.capacity)
+		// println("waiting for", ccr.size - *ccr.capacity, "jobs")
 	}
 }
 
-func NewCCR(concurrency int) *CCR {
+func NewCCR(concurrency int, debug bool) *CCR {
 	return &CCR{
 		size:      concurrency,
 		mutex:     &sync.Mutex{},
 		capacity:  &concurrency,
 		semaphore: make(chan struct{}, concurrency),
+                isLoggingEnabled: debug,
 	}
 }
 
@@ -194,9 +209,12 @@ func processNode(ccr *CCR, sm *SiteMap, r *[]*WebResource, u string, n *html.Nod
 func processAllLinks(ccr *CCR, sm *SiteMap, r *[]*WebResource, url string, n *html.Node) {
 	// traverse the child nodes
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		ccr.start(func() {
-			processNode(ccr, sm, r, url, c)
-		})
+		ccr.start(&CCRJob{
+                    routine: func() {
+        		processNode(ccr, sm, r, url, c)
+                    },
+                    name: url,
+                })
 	}
 
 	ccr.wait()
@@ -219,7 +237,6 @@ func BuildSiteMap(ccr *CCR, sm *SiteMap, url string, depth int, maxDepth int) {
 	sm.mutex.Unlock()
 
 	if depth == maxDepth || (r != nil && r.fetched) {
-		sm.spinner.Stop()
 		return
 	}
 
