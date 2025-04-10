@@ -1,3 +1,2 @@
-valradar*
-*.auth
-test
+/target
+.venv
