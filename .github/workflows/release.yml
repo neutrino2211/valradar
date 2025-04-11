@@ -30,7 +30,7 @@ jobs:
 
         ls -R builds
 
-        cp modules/modules.zip builds/{darwin,linux,windows}/modules.zip
+        cp modules/modules.zip builds/{darwin,linux,windows}
 
         zip -r builds/{darwin,linux,windows}.zip builds/{darwin,linux,windows}
     - name: upload prerelease artifacts
