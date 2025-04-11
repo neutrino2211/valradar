@@ -30,10 +30,10 @@ jobs:
         token: ${{ secrets.TOKEN }}
         tag_name: ${{ env.VERSION }}
         files: |
-          valradar-macos
-          valradar-linux
-          valradar-windows.exe
-          modules.zip
+          /home/runner/work/valradar/valradar/valradar-macos
+          /home/runner/work/valradar/valradar/valradar-linux
+          /home/runner/work/valradar/valradar/valradar-windows.exe
+          /home/runner/work/valradar/valradar/modules.zip
 
 
   build-modules:

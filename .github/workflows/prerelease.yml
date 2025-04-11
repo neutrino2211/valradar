@@ -21,6 +21,7 @@ jobs:
       id: get-version
       run: |
         echo "VERSION=$(bash version.sh)" >> $GITHUB_ENV
+        ls -R .
     - name: upload artifacts
       id: upload-artifacts
       uses: softprops/action-gh-release@v2
@@ -31,10 +32,10 @@ jobs:
         prerelease: true
         tag_name: ${{ env.VERSION }}-dev-${{ github.sha }}
         files: |
-          valradar-macos
-          valradar-linux
-          valradar-windows.exe
-          modules.zip
+          /home/runner/work/valradar/valradar/valradar-macos
+          /home/runner/work/valradar/valradar/valradar-linux
+          /home/runner/work/valradar/valradar/valradar-windows.exe
+          /home/runner/work/valradar/valradar/modules.zip
 
 
   build-modules:
