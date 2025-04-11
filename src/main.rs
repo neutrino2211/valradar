@@ -25,7 +25,10 @@ struct Args {
     #[arg(short = 'i', long, long_help = "Show plugin information", default_value = "false")]
     info: bool,
 
-    #[arg(help = "Plugin module name")]
+    #[arg(short = 'l', long, long_help = "Show license", default_value = "false")]
+    license: bool,
+
+    #[arg(help = "Plugin module name", default_value = "_")]
     plugin: String,
 
     #[arg(help = "Arguments for the plugin", last = true)]
@@ -34,6 +37,17 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+
+    if args.license {
+        utils::license::print_license();
+        return;
+    }
+
+    if args.plugin == "_" {
+        println!("Plugin module name is required");
+        return;
+    }
+
     let (plugin_name, plugin_args) = (args.plugin, args.args);
     let parts = plugin_name.split('.').collect::<Vec<&str>>();
     let plugin_module_name = match parts.last().cloned() {
@@ -43,6 +57,9 @@ fn main() {
     let mut plugin_path = parts.join("/") + ".py";
     if let Some(path) = utils::module::search_module(&plugin_path) {
         plugin_path = path;
+    } else {
+        println!("Plugin '{}' not found", plugin_name);
+        return;
     }
     let plugin = Plugin::new(plugin_module_name.to_string(), plugin_path.to_string());
 

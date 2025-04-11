@@ -4,6 +4,7 @@ pub mod context;
 pub mod display;
 pub mod logging;
 pub mod module;
+pub mod license;
 
 // Re-export commonly used items for convenience
 pub use metadata::PluginMetadata;
