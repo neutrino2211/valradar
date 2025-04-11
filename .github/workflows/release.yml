@@ -9,7 +9,7 @@ jobs:
   upload-release:
 
     runs-on: ubuntu-latest
-    needs: [build-macos, build-linux, build-windows]
+    needs: [build-macos, build-linux, build-windows, build-modules]
 
     steps:
     - uses: actions/checkout@v1
