@@ -24,49 +24,20 @@ jobs:
         draft: false
         prerelease: false   
     - name: download artifacts
-      uses: actions/download-artifact@v1
+      uses: actions/download-artifact@v4
       with:
         name: artifacts
     - name: upload macos
       id: upload-macos 
-      uses: actions/upload-release-asset@v1.0.1
+      uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.TOKEN }}
       with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: artifacts/valradar-macos
-        asset_name: valradar-macos
-        asset_content_type: application/octet-stream
-    - name: upload linux
-      id: upload-linux
-      uses: actions/upload-release-asset@v1.0.1
-      env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: artifacts/valradar-linux
-        asset_name: valradar-linux
-        asset_content_type: application/octet-stream   
-    - name: upload windows
-      id: upload-windows
-      uses: actions/upload-release-asset@v1.0.1
-      env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: artifacts/valradar-windows.exe
-        asset_name: valradar-windows.exe
-        asset_content_type: application/octet-stream
-    - name: upload modules
-      id: upload-modules
-      uses: actions/upload-release-asset@v1.0.1
-      env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: artifacts/modules.zip
-        asset_name: modules.zip
-        asset_content_type: application/zip
+        files: |
+          artifacts/valradar-macos
+          artifacts/valradar-linux
+          artifacts/valradar-windows.exe
+          artifacts/modules.zip
 
 
   build-modules:
