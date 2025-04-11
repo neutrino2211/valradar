@@ -17,12 +17,18 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: .
+    - name: Get version
+      id: get-version
+      run: |
+        echo "VERSION=$(bash version.sh)" >> $GITHUB_ENV
     - name: upload artifacts
       id: upload-artifacts
       uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.TOKEN }}
       with:
+        token: ${{ secrets.TOKEN }}
+        tag_name: ${{ github.env.VERSION }}
         files: |
           valradar-macos
           valradar-linux
