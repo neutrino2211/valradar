@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 jobs:
   upload-release:
@@ -27,8 +27,8 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: .
-    - name: upload macos
-      id: upload-macos 
+    - name: upload artifacts
+      id: upload-artifacts
       uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.TOKEN }}
