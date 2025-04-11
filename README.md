@@ -9,6 +9,8 @@
 
 Valradar is a high-performance, low-latency, and scalable data processing framework designed for OSINT, RECON and a wide range of operations. It provides a flexible plugin architecture that allows you to create custom data collection and processing pipelines.
 
+https://github.com/user-attachments/assets/512fc378-e189-4bb4-b0db-e40f0e857a17
+
 ## Features
 
 - **Plugin-based Architecture**: Create custom data processing plugins in Python
