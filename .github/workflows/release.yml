@@ -26,7 +26,7 @@ jobs:
     - name: download artifacts
       uses: actions/download-artifact@v4
       with:
-        name: artifacts
+        path: .
     - name: upload macos
       id: upload-macos 
       uses: softprops/action-gh-release@v2
@@ -34,10 +34,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.TOKEN }}
       with:
         files: |
-          artifacts/valradar-macos
-          artifacts/valradar-linux
-          artifacts/valradar-windows.exe
-          artifacts/modules.zip
+          valradar-macos
+          valradar-linux
+          valradar-windows.exe
+          modules.zip
 
 
   build-modules:
@@ -51,7 +51,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts/modules.zip
+          name: modules.zip
           path: modules.zip
   
   build-macos:
@@ -64,11 +64,11 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
     - name: Build
       run: |
-        cargo build --release
+        PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo build --release
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: artifacts/valradar-macos
+        name: valradar-macos
         path: target/release/valradar
 
   build-linux:
@@ -85,7 +85,7 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: artifacts/valradar-linux
+        name: valradar-linux
         path: target/release/valradar
 
   build-windows:
@@ -102,5 +102,5 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: artifacts/valradar-windows.exe
+        name: valradar-windows.exe
         path: target/release/valradar.exe
