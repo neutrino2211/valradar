@@ -1,6 +1,13 @@
 # Valradar
 
-Valradar is a high-performance, low-latency, and scalable data processing framework designed for OSINT and RECON operations. It provides a flexible plugin architecture that allows you to create custom data collection and processing pipelines.
+> [!WARNING]  
+> This tool is in a beta state, although little changes are to be expected proceed with caution.
+
+<p align="center">
+    <img src="images/logo.png" alt="valradar logo" width="200"/>
+</p>
+
+Valradar is a high-performance, low-latency, and scalable data processing framework designed for OSINT, RECON and a wide range of operations. It provides a flexible plugin architecture that allows you to create custom data collection and processing pipelines.
 
 ## Features
 
