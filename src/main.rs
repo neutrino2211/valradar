@@ -40,7 +40,10 @@ fn main() {
         Some(name) => name,
         None => "main".into(),
     };
-    let plugin_path = parts.join("/") + ".py";
+    let mut plugin_path = parts.join("/") + ".py";
+    if let Some(path) = utils::module::search_module(&plugin_path) {
+        plugin_path = path;
+    }
     let plugin = Plugin::new(plugin_module_name.to_string(), plugin_path.to_string());
 
     if args.debug {
