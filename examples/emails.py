@@ -13,7 +13,6 @@ class DataContext:
     def __init__(self, url):
         self.url = url if url.endswith("/") else url + "/"
         self.data = {}
-        self.processed = False
         self.emails = []
 
     def collect(self):
@@ -39,13 +38,8 @@ class DataContext:
         return hrefs
 
     def process(self):
-        # Use stored state
-        if not self.processed:
-            self.data['processed'] = True
-            self.processed = True
-        
         if len(self.emails) > 0:
-            return {"url": self.url[:80], "status": "processed", "emails": ", ".join(self.emails)}
+            return {"url": self.url[:80], "emails": ", ".join(self.emails)}
         else:
             return None
 

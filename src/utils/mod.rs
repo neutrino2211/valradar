@@ -3,6 +3,7 @@ use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
 use comfy_table::*;
 use comfy_table::Color;
+use comfy_table::CellAlignment;
 use pyo3::prelude::*;
 use terminal_size::{terminal_size, Height, Width};
 use colored::Colorize;
@@ -103,13 +104,20 @@ impl fmt::Display for ProcessedData {
             .into_iter()
             .map(|key| 
                 Cell::new(key.to_uppercase().as_str())
+                .set_alignment(CellAlignment::Center)
                 .fg(Color::Green)
             )
             .collect::<Vec<Cell>>();
 
         table.load_preset(UTF8_FULL);
         table.apply_modifier(UTF8_ROUND_CORNERS);
-        table.set_header(headers);
+        table.set_header(headers.clone());
+        let header_len: u32 = headers.len() as u32;
+        for idx in 0..headers.len() {
+            if let Some(column) = table.column_mut(idx) {
+                column.set_constraint(ColumnConstraint::UpperBoundary(comfy_table::Width::Fixed((width as u32 / header_len).try_into().unwrap())));
+            }
+        }
         table.set_width(width);
         for result in self.0.clone() {
             let row = result.values
