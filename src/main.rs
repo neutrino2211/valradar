@@ -8,9 +8,9 @@ use valradar::{Plugin, Orchestrator, utils};
 #[command(
     author = "Mainasara Tsowa (tsowamainasara@gmail.com)",
     version = "0.1.0",
-    about = "Valradar is a high-performance, low-latency, and scalable data processing framework for OSINT and RECON operations.",
+    about = "Valradar is a high-performance, low-latency, and scalable data processing framework for OSINT, RECON, and a wide range of operations.",
     after_help = "MIT License (c) 2025 Mainasara Tsowa",
-    long_about = "Valradar is a high-performance, low-latency, and scalable data processing framework for OSINT and RECON operations."
+    long_about = "Valradar is a high-performance, low-latency, and scalable data processing framework designed for OSINT, RECON, and a wide range of operations. It provides a flexible plugin architecture that allows you to create custom data collection and processing pipelines."
 )]
 struct Args {
     #[arg(short = '!', long, long_help = "Enable debug mode", default_value = "false")]

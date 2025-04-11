@@ -142,9 +142,11 @@ Y88b   d88P  d88P 888 888      888   d88P     d88P 888 888    888    d88P 888 88
   Y88o88P  d88P   888 888      888 T88b     d88P   888 888    888  d88P   888 888 T88b   
    Y888P  d8888888888 888      888  T88b   d8888888888 888  .d88P d8888888888 888  T88b  
     Y8P  d88P     888 88888888 888   T88b d88P     888 8888888P' d88P     888 888   T88b 
+
+    {}
                                                                                          
 {} v{}                                                                                    
 {}                                                                                         
-    ", plugin_metadata.name.bold().white(), plugin_metadata.version.bold().yellow(), plugin_metadata.description.bold().blue());
+    ", "by Mainasara Tsowa <tsowamainasara@gmail.com>".green().bold(), plugin_metadata.name.bold().white(), plugin_metadata.version.bold().yellow(), plugin_metadata.description.bold().blue());
     println!("{}", raw_banner.blue());
 }
