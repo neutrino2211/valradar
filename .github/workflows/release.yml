@@ -49,7 +49,7 @@ jobs:
         run: |
           zip -r modules.zip modules
       - name: Upload Artifact
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts/modules.zip
           path: modules.zip
@@ -66,7 +66,7 @@ jobs:
       run: |
         cargo build --release
     - name: Upload Artifact
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v4
       with:
         name: artifacts/valradar-macos
         path: target/release/valradar
@@ -83,7 +83,7 @@ jobs:
       run: |
         cargo build --release
     - name: Upload Artifact
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v4
       with:
         name: artifacts/valradar-linux
         path: target/release/valradar
@@ -100,7 +100,7 @@ jobs:
       run: |
         cargo build --release
     - name: Upload Artifact
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v4
       with:
         name: artifacts/valradar-windows.exe
         path: target/release/valradar.exe
