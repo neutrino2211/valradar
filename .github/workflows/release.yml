@@ -28,7 +28,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.TOKEN }}
       with:
         token: ${{ secrets.TOKEN }}
-        tag_name: ${{ github.env.VERSION }}
+        tag_name: ${{ env.VERSION }}
         files: |
           valradar-macos
           valradar-linux
