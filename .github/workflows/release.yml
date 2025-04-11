@@ -27,11 +27,17 @@ jobs:
         mv valradar-darwin/valradar builds/darwin/valradar
         mv valradar-linux/valradar builds/linux/valradar
         mv valradar-windows/valradar.exe builds/windows/valradar.exe
-        zip -r builds/{darwin,linux,windows}/modules.zip modules
+        
+        zip -r builds/darwin/modules.zip modules
+        zip -r builds/linux/modules.zip modules
+        zip -r builds/windows/modules.zip modules
 
         ls -R builds
 
-        zip -r builds/{darwin,linux,windows}.zip builds/{darwin,linux,windows}
+        zip -r builds/darwin.zip builds/darwin
+        zip -r builds/linux.zip builds/linux
+        zip -r builds/windows.zip builds/windows
+        
     - name: upload prerelease artifacts
       if: github.ref == 'refs/heads/dev'
       id: upload-prerelease-artifacts
