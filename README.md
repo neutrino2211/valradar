@@ -1,7 +1,7 @@
 # Valradar
 
 > [!WARNING]  
-> This tool is in a beta state, although little changes are to be expected proceed with caution.
+> This tool is in early development, although little changes are to be expected proceed with caution.
 
 <p align="center">
     <img src="images/logo.png" alt="valradar logo" width="500"/>
@@ -37,6 +37,7 @@ cargo run -- -c 4 examples.emails https://example.com
 - `-c, --concurrency`: Number of concurrent worker threads (default: 1)
 - `-d, --depth`: How many recursive calls to make (default: 1)
 - `-!, --debug`: Enable debug mode (default: false)
+- `-i, --info`: Show plugin information (default: false)
 - `plugin`: Plugin module name (e.g., examples.emails)
 - `args`: Arguments for the plugin
 
@@ -98,11 +99,6 @@ VALRADAR_CONFIG = {
         "name": "Plugin Name",
         "description": "Plugin description",
         "version": "0.1.0",
-        "tags": ["tag1", "tag2"],
-        "author": "Your Name",
-        "license": "MIT",
-        "dependencies": ["dependency1", "dependency2"],
-        "requirements": ["requirement1", "requirement2"]
     }
 }
 ```
@@ -123,11 +119,7 @@ VALRADAR_CONFIG = {
 
 ### DataContext Class
 
-The `DataContext` class is used to maintain state during processing:
-
-- `__init__`: Initialize the context with input data
-- `collect`: Collect new data and return new contexts
-- `process`: Process the collected data and return results
+The `DataContext` class is used to maintain state during processing. It is not required but the concept is very useful for passing around context between each call to the collection and processing functions as those functions would not be able to share data otherwise
 
 ### Plugin Configuration
 
