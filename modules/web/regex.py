@@ -30,6 +30,11 @@ class DataContext:
         return [DataContext(link, self.types, self.processed_urls) for link in self.extract_links()]
     
     def extract_links(self):
+        if self.url in self.processed_urls:
+            return []
+        
+        self.processed_urls.append(self.url)
+        
         soup = bs4.BeautifulSoup(self.data['content'], 'html.parser')
         hrefs = []
         for link in soup.find_all('a'):
