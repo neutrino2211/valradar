@@ -19,22 +19,22 @@ class DataContext:
         # Do some work and store state
         if not self.url.startswith('http'):
             return []
-        
+
         if self.url in self.processed_urls:
             return []
 
         self.data['content'] = requests.get(self.url, headers=headers).text
         for k in self.types.keys():
             self.types_result[k] = re.findall(self.types[k], self.data['content'])
-        
+
         return [DataContext(link, self.types, self.processed_urls) for link in self.extract_links()]
-    
+
     def extract_links(self):
         if self.url in self.processed_urls:
             return []
-        
+
         self.processed_urls.append(self.url)
-        
+
         soup = bs4.BeautifulSoup(self.data['content'], 'html.parser')
         hrefs = []
         for link in soup.find_all('a'):

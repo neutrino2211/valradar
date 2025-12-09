@@ -10,7 +10,7 @@ class YaraContext:
 
     def collect(self):
         directories = []
-        
+
         try:
             for file in os.listdir(self.directory):
                 if os.path.isfile(os.path.join(self.directory, file)):
@@ -62,6 +62,6 @@ VALRADAR_CONFIG = {
         "author": "Mainasara Tsowa <tsowamainasara@gmail.com>",
         "license": "MIT",
         "url": "https://github.com/neutrino2211/valradar/blob/dev/modules/forensics/yara-fs.py",
-        "dependencies": ["yara-python"]    
+        "dependencies": ["yara-python"]
     }
 }
