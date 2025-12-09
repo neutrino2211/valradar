@@ -10,36 +10,25 @@ pub struct PluginMetadata {
 
 impl Default for PluginMetadata {
     fn default() -> Self {
-        Self { 
-            name: "".to_string(), 
-            version: "".to_string(), 
-            description: "".to_string(), 
-            remaining: vec![] 
+        Self {
+            name: "".to_string(),
+            version: "".to_string(),
+            description: "".to_string(),
+            remaining: vec![],
         }
     }
 }
 
 impl fmt::Display for PluginMetadata {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let remaining = self.remaining.iter()
+        let remaining = self
+            .remaining
+            .iter()
             .map(|(key, value)| format!("{}: {}", key, value))
             .collect::<Vec<String>>()
             .join("\n");
-        
-        let folded_description: String;
 
-        if self.description.len() > 40 {
-            folded_description = self.description.chars()
-                .take(40)
-                .collect::<Vec<char>>()
-                .iter()
-                .map(|c| c.to_string())
-                .collect::<Vec<String>>()
-                .join("\n")
-                .into();
-        } else {
-            folded_description = self.description.clone();
-        }
+        let folded_description = self.description.clone();
 
         write!(
             f,
@@ -51,4 +40,4 @@ impl fmt::Display for PluginMetadata {
             remaining
         )
     }
-} 
+}
