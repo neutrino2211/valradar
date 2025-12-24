@@ -11,3 +11,4 @@ pub use metadata::PluginMetadata;
 pub use context::{ProcessingResult, ProcessedData, TaskRequest, YieldValue, PluginInstance};
 pub use logging::debug;
 pub use display::print_banner;
+pub use module::{list_modules, search_module, ModuleEntry};

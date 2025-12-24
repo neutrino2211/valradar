@@ -3,7 +3,7 @@ use std::env;
 use std::time::Instant;
 use indicatif::{ProgressBar, ProgressStyle};
 use clap::{Parser, command};
-use valradar::{Plugin, Orchestrator, utils};
+use valradar::{Plugin, Orchestrator, utils, interactive};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -14,6 +14,9 @@ use valradar::{Plugin, Orchestrator, utils};
     long_about = "Valradar is a high-performance, low-latency, and scalable data processing framework designed for OSINT, RECON, and a wide range of operations. It provides a flexible plugin architecture that allows you to create custom data collection and processing pipelines."
 )]
 struct Args {
+    #[arg(short = 'I', long, long_help = "Start interactive console mode")]
+    interactive: bool,
+
     #[arg(short = '!', long, long_help = "Enable debug mode", default_value = "false")]
     debug: bool,
 
@@ -132,6 +135,14 @@ fn print_plugin_help(plugin: &Plugin, plugin_name: &str) {
 
 fn main() {
     let args = Args::parse();
+
+    // Interactive mode takes precedence
+    if args.interactive {
+        if let Err(e) = interactive::run_interactive() {
+            eprintln!("Console error: {}", e);
+        }
+        return;
+    }
 
     if args.license {
         utils::license::print_license();
