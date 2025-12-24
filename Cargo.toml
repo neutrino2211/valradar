@@ -1,6 +1,6 @@
 [package]
 name = "valradar"
-version = "0.1.1"
+version = "1.0.0-alpha"
 edition = "2024"
 build = "src/build.rs"
 
