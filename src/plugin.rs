@@ -248,10 +248,19 @@ impl Plugin {
         &self,
         instance: &PluginInstance,
         target: &str,
+        kwargs: &HashMap<String, String>,
     ) -> anyhow::Result<Vec<YieldValue>> {
         Python::with_gil(|py| {
-            // Call run(target) which returns a generator
-            let generator = instance.py_instance.call_method1(py, "run", (target,))?;
+            // Build kwargs dict for Python
+            let py_kwargs = PyDict::new(py);
+            for (key, value) in kwargs {
+                py_kwargs.set_item(key, value)?;
+            }
+
+            // Call run(target, **kwargs) which returns a generator
+            let generator = instance
+                .py_instance
+                .call_method(py, "run", (target,), Some(py_kwargs))?;
 
             let mut yields = vec![];
 

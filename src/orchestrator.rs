@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -8,12 +9,20 @@ use crossbeam::channel;
 use crate::plugin::Plugin;
 use crate::utils::{self, PluginInstance, ProcessingResult, YieldValue};
 
+/// A task in the work queue with target and kwargs
+#[derive(Debug, Clone)]
+struct WorkItem {
+    target: String,
+    kwargs: HashMap<String, String>,
+}
+
 /// The Orchestrator manages parallel task execution with deduplication
 pub struct Orchestrator {
     plugin: Arc<Plugin>,
     instance: Arc<PluginInstance>,
     num_workers: usize,
     max_tasks: usize,
+    initial_kwargs: HashMap<String, String>,
     visited: Arc<Mutex<HashSet<String>>>,
     results: Arc<Mutex<Vec<ProcessingResult>>>,
     tasks_processed: Arc<AtomicUsize>,
@@ -28,6 +37,7 @@ impl Orchestrator {
             instance: Arc::new(instance),
             num_workers,
             max_tasks: 0, // 0 means unlimited
+            initial_kwargs: HashMap::new(),
             visited: Arc::new(Mutex::new(HashSet::new())),
             results: Arc::new(Mutex::new(Vec::new())),
             tasks_processed: Arc::new(AtomicUsize::new(0)),
@@ -38,6 +48,11 @@ impl Orchestrator {
     /// Set maximum tasks to process (0 = unlimited)
     pub fn set_max_tasks(&mut self, max_tasks: usize) {
         self.max_tasks = max_tasks;
+    }
+
+    /// Set initial kwargs to pass to all run() calls
+    pub fn set_kwargs(&mut self, kwargs: HashMap<String, String>) {
+        self.initial_kwargs = kwargs;
     }
 
     /// Check if a target has been visited, and mark it if not
@@ -59,17 +74,21 @@ impl Orchestrator {
         }
 
         // Create an unbounded channel for the work queue
-        let (task_tx, task_rx) = channel::unbounded::<String>();
+        let (task_tx, task_rx) = channel::unbounded::<WorkItem>();
 
-        // Seed initial targets (with dedup)
+        // Seed initial targets (with dedup) and initial kwargs
         for target in initial_targets {
             if self.mark_visited(&target) {
-                task_tx.send(target)?;
+                task_tx.send(WorkItem {
+                    target,
+                    kwargs: self.initial_kwargs.clone(),
+                })?;
             }
         }
 
         let mut handles = vec![];
         let active_workers = Arc::new(AtomicUsize::new(self.num_workers));
+        let initial_kwargs = Arc::new(self.initial_kwargs.clone());
 
         // Spawn worker threads
         for worker_id in 0..self.num_workers {
@@ -83,6 +102,7 @@ impl Orchestrator {
             let shutdown = Arc::clone(&self.shutdown);
             let max_tasks = self.max_tasks;
             let active_workers = Arc::clone(&active_workers);
+            let initial_kwargs = Arc::clone(&initial_kwargs);
 
             let handle = thread::spawn(move || {
                 utils::debug(&format!("Worker {} started", worker_id));
@@ -95,7 +115,7 @@ impl Orchestrator {
 
                     // Try to receive a task with timeout
                     match task_rx.recv_timeout(std::time::Duration::from_millis(100)) {
-                        Ok(target) => {
+                        Ok(work_item) => {
                             // Check max tasks limit
                             if max_tasks > 0 {
                                 let current = tasks_processed.fetch_add(1, Ordering::Relaxed);
@@ -107,10 +127,10 @@ impl Orchestrator {
                                 tasks_processed.fetch_add(1, Ordering::Relaxed);
                             }
 
-                            utils::debug(&format!("Worker {} processing: {}", worker_id, target));
+                            utils::debug(&format!("Worker {} processing: {}", worker_id, work_item.target));
 
-                            // Run the plugin for this target
-                            match plugin.run_target(&instance, &target) {
+                            // Run the plugin for this target with kwargs
+                            match plugin.run_target(&instance, &work_item.target, &work_item.kwargs) {
                                 Ok(yields) => {
                                     for yield_value in yields {
                                         match yield_value {
@@ -126,7 +146,15 @@ impl Orchestrator {
                                                     drop(visited_guard);
 
                                                     if !shutdown.load(Ordering::Relaxed) {
-                                                        let _ = task_tx.send(task.target);
+                                                        // Merge initial kwargs with task-specific kwargs
+                                                        // Task kwargs take precedence
+                                                        let mut merged_kwargs = initial_kwargs.as_ref().clone();
+                                                        merged_kwargs.extend(task.kwargs);
+
+                                                        let _ = task_tx.send(WorkItem {
+                                                            target: task.target,
+                                                            kwargs: merged_kwargs,
+                                                        });
                                                     }
                                                 }
                                             }
@@ -136,7 +164,7 @@ impl Orchestrator {
                                 Err(e) => {
                                     utils::debug(&format!(
                                         "Worker {} error processing {}: {}",
-                                        worker_id, target, e
+                                        worker_id, work_item.target, e
                                     ));
                                 }
                             }
