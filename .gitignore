@@ -2,3 +2,4 @@
 .venv
 .DS_Store
 experiments/manual-llm-osint.py
+__pycache__

@@ -1,28 +1,65 @@
+use crate::utils::{self, PluginInstance, ProcessingResult, TaskRequest, YieldValue};
+use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyIterator, PyList};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString};
-use pyo3::PyObject;
 
-use crate::utils;
+/// Metadata about a plugin module
+#[derive(Debug, Clone)]
+pub struct PluginInfo {
+    pub name: String,
+    pub description: String,
+    pub author: String,
+    pub version: String,
+    pub options: Vec<OptionInfo>,
+}
 
-const IGNORE_KEYS: [&str; 3] = ["name", "description", "version"];
+#[derive(Debug, Clone)]
+pub struct OptionInfo {
+    pub name: String,
+    pub opt_type: String,
+    pub default: Option<String>,
+    pub required: bool,
+    pub help: String,
+}
 
-struct PluginMetadata<'a>(&'a PyDict);
-
-impl<'a> PluginMetadata<'a> {
-    fn new(metadata: &'a PyDict) -> Self {
-        Self(metadata)
-    }
-
-    pub fn get_value(&self, key: &str) -> anyhow::Result<String> {
-        let value = self.0.get_item(key)?;
-        if let Some(value) = value {
-            Ok(value.extract::<&PyString>()?.to_string())
-        } else {
-            Err(anyhow::anyhow!("Mandatory metadata key not found: '{}'", key))
+impl Default for PluginInfo {
+    fn default() -> Self {
+        Self {
+            name: "Unknown".to_string(),
+            description: String::new(),
+            author: String::new(),
+            version: "0.1.0".to_string(),
+            options: vec![],
         }
+    }
+}
+
+impl std::fmt::Display for PluginInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Name: {}", self.name)?;
+        writeln!(f, "Version: {}", self.version)?;
+        if !self.description.is_empty() {
+            writeln!(f, "Description: {}", self.description)?;
+        }
+        if !self.author.is_empty() {
+            writeln!(f, "Author: {}", self.author)?;
+        }
+        if !self.options.is_empty() {
+            writeln!(f, "Options:")?;
+            for opt in &self.options {
+                let req = if opt.required { " (required)" } else { "" };
+                let def = opt
+                    .default
+                    .as_ref()
+                    .map(|d| format!(" [default: {}]", d))
+                    .unwrap_or_default();
+                writeln!(f, "  --{}: {}{}{}", opt.name, opt.opt_type, req, def)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -35,7 +72,7 @@ pub struct Plugin {
 
 impl Plugin {
     fn get_existing_python_paths(py: Python<'_>) -> anyhow::Result<&PyList> {
-        let mut python_command =Command::new("python")
+        let mut python_command = Command::new("python")
             .arg("-c")
             .arg("import sys; print(sys.path)")
             .output();
@@ -53,7 +90,9 @@ impl Plugin {
             if let Ok(output) = python_command {
                 output_string = String::from_utf8(output.stdout).unwrap();
             } else {
-                return Err(anyhow::anyhow!("Failed to get python paths: neither python nor python3 is available"));
+                return Err(anyhow::anyhow!(
+                    "Failed to get python paths: neither python nor python3 is available"
+                ));
             }
         }
 
@@ -68,184 +107,212 @@ impl Plugin {
         Self { name, path, code }
     }
 
-    fn create_interpreter(&self) -> anyhow::Result<(PyObject, PyObject)> {
+    /// Load the Python module and return the MODULE_CLASS
+    fn load_module<'py>(&self, py: Python<'py>) -> anyhow::Result<&'py PyAny> {
+        let plugin_name = Path::new(&self.name).file_name().unwrap();
+        let sys = PyModule::import(py, "sys")?;
+        let existing_paths = Self::get_existing_python_paths(py)?;
+
+        // Add the project root to Python path for valradar SDK imports
+        let project_root = Path::new(&self.path)
+            .parent()
+            .and_then(|p| p.parent())
+            .unwrap_or(Path::new("."));
+
+        let new_paths = PyList::new(py, existing_paths.iter());
+        new_paths.insert(0, project_root.to_string_lossy().to_string())?;
+
+        // Also add current working directory
+        if let Ok(cwd) = std::env::current_dir() {
+            new_paths.insert(0, cwd.to_string_lossy().to_string())?;
+        }
+
+        utils::debug(&format!("Python path includes: {:?}", project_root));
+        let _ = sys.setattr("path", new_paths);
+
+        let plugin =
+            PyModule::from_code(py, &self.code, &self.path, plugin_name.to_str().unwrap())?;
+        let module_class = plugin.getattr("MODULE_CLASS")?;
+
+        Ok(module_class)
+    }
+
+    /// Get plugin metadata without instantiating
+    pub fn get_info(&self) -> anyhow::Result<PluginInfo> {
         Python::with_gil(|py| {
-            let plugin_name = Path::new(&self.name).file_name().unwrap();
-            let sys = PyModule::import(py, "sys")?;
-            let existing_paths = Self::get_existing_python_paths(py)?;
-            utils::debug(&format!("Existing paths: {:?}", existing_paths));
-            let _ = sys.setattr("path", existing_paths);
-            utils::debug(&format!("Sys path: {:?}", sys.getattr("path")?));
-            
-            let plugin = PyModule::from_code(py, &self.code, &self.path, plugin_name.to_str().unwrap())?;
-            let config = plugin.getattr("VALRADAR_CONFIG")?;
-            
-            Ok((plugin.into(), config.into()))
+            let module_class = self.load_module(py)?;
+            utils::debug(&format!("Loaded module class: {:?}", module_class));
+
+            let name = module_class
+                .getattr("name")
+                .and_then(|v| v.extract::<String>())
+                .unwrap_or_else(|_| "Unknown".to_string());
+
+            let description = module_class
+                .getattr("description")
+                .and_then(|v| v.extract::<String>())
+                .unwrap_or_default();
+
+            let author = module_class
+                .getattr("author")
+                .and_then(|v| v.extract::<String>())
+                .unwrap_or_default();
+
+            let version = module_class
+                .getattr("version")
+                .and_then(|v| v.extract::<String>())
+                .unwrap_or_else(|_| "0.1.0".to_string());
+
+            let mut options = vec![];
+            if let Ok(opts_list) = module_class.getattr("options") {
+                if let Ok(opts) = opts_list.extract::<&PyList>() {
+                    for opt in opts.iter() {
+                        let opt_name = opt
+                            .getattr("name")
+                            .and_then(|v| v.extract::<String>())
+                            .unwrap_or_default();
+                        let opt_type = opt
+                            .getattr("type")
+                            .and_then(|v| v.extract::<String>())
+                            .unwrap_or_else(|_| "str".to_string());
+                        let default = opt.getattr("default").ok().and_then(|v| {
+                            if v.is_none() {
+                                None
+                            } else {
+                                v.extract::<String>().ok()
+                            }
+                        });
+                        let required = opt
+                            .getattr("required")
+                            .and_then(|v| v.extract::<bool>())
+                            .unwrap_or(false);
+                        let help = opt
+                            .getattr("help")
+                            .and_then(|v| v.extract::<String>())
+                            .unwrap_or_default();
+
+                        options.push(OptionInfo {
+                            name: opt_name,
+                            opt_type,
+                            default,
+                            required,
+                            help,
+                        });
+                    }
+                }
+            }
+
+            Ok(PluginInfo {
+                name,
+                description,
+                author,
+                version,
+                options,
+            })
         })
     }
 
+    /// For backward compatibility with metadata display
     pub fn get_metadata(&self) -> anyhow::Result<utils::PluginMetadata> {
-        let (_plugin, config) = self.create_interpreter()?;
-        let result = Python::with_gil(|py| {
-            let config = match config.extract::<&PyDict>(py) {
-                Ok(config) => config,
-                Err(e) => {
-                    utils::debug(&format!("Failed to get config: {}", e));
-                    return Ok(utils::PluginMetadata::default());
-                },
-            };
+        let info = self.get_info()?;
+        Ok(utils::PluginMetadata {
+            name: info.name,
+            description: info.description,
+            version: info.version,
+            options: info.options,
+            remaining: vec![("author".to_string(), info.author)],
+        })
+    }
 
-            let metadata = match config.get_item("metadata") {
-                Ok(metadata) => {
-                    if let Some(metadata) = metadata {
-                        metadata
-                    } else {
-                        return Ok(utils::PluginMetadata::default());
+    /// Instantiate the plugin class and call setup()
+    pub fn instantiate(&self) -> anyhow::Result<PluginInstance> {
+        Python::with_gil(|py| {
+            let module_class = self.load_module(py)?;
+
+            // Instantiate: instance = MODULE_CLASS()
+            let instance = module_class.call0()?;
+            utils::debug(&format!("Instantiated module: {:?}", instance));
+
+            // Call setup() if it exists
+            if instance.hasattr("setup")? {
+                instance.call_method0("setup")?;
+                utils::debug("Called setup() on module instance");
+            }
+
+            Ok(PluginInstance::new(instance.into(), self.name.clone()))
+        })
+    }
+
+    /// Run the generator for a target and collect all yielded values
+    pub fn run_target(
+        &self,
+        instance: &PluginInstance,
+        target: &str,
+    ) -> anyhow::Result<Vec<YieldValue>> {
+        Python::with_gil(|py| {
+            // Call run(target) which returns a generator
+            let generator = instance.py_instance.call_method1(py, "run", (target,))?;
+
+            let mut yields = vec![];
+
+            // Import SDK types for isinstance checks
+            let sdk = PyModule::import(py, "valradar.sdk")?;
+            let result_class = sdk.getattr("Result")?;
+            let task_class = sdk.getattr("Task")?;
+
+            // Iterate the generator
+            let iterator = PyIterator::from_object(generator.as_ref(py))?;
+
+            for item in iterator {
+                let item = item?;
+
+                if item.is_instance(result_class)? {
+                    // Extract Result fields
+                    let host = item
+                        .getattr("host")
+                        .and_then(|v| v.extract::<String>())
+                        .unwrap_or_default();
+
+                    let data = item.getattr("data")?;
+                    let data_dict = data.extract::<&PyDict>()?;
+
+                    let mut data_map: HashMap<String, String> = HashMap::new();
+                    for (key, value) in data_dict.iter() {
+                        let k = key.extract::<String>()?;
+                        let v = value.str()?.to_string();
+                        data_map.insert(k, v);
                     }
-                },
-                Err(e) => {
-                    utils::debug(&format!("Failed to get metadata: {}", e));
-                    return Ok(utils::PluginMetadata::default());
-                },
-            };
 
-            let metadata = match metadata.extract::<&PyDict>() {
-                Ok(metadata) => metadata,
-                Err(e) => {
-                    utils::debug(&format!("Failed to get metadata: {}", e));
-                    return Ok(utils::PluginMetadata::default());
-                },
-            };
+                    let result = ProcessingResult::from_data(data_map, host);
+                    yields.push(YieldValue::Result(result));
+                } else if item.is_instance(task_class)? {
+                    // Extract Task fields
+                    let target = item.getattr("target")?.extract::<String>()?;
 
-            let remaining = metadata.items().into_iter().map(|py_tuple| {
-                let (key, value) = match py_tuple.extract::<(&PyString, &PyAny)>() {
-                    Ok((key, value)) => (key.to_string(), value.to_string()),
-                    Err(e) => {
-                        utils::debug(&format!("Failed to get remaining: {}", e));
-                        ("".to_string(), "".to_string())
-                    },
-                };
-                (key, value)
-            }).filter(|(key, _)| !IGNORE_KEYS.contains(&key.as_str())).collect();
+                    let kwargs_dict = item.getattr("kwargs")?;
+                    let mut kwargs: HashMap<String, String> = HashMap::new();
+                    if let Ok(dict) = kwargs_dict.extract::<&PyDict>() {
+                        for (key, value) in dict.iter() {
+                            let k = key.extract::<String>()?;
+                            let v = value.str()?.to_string();
+                            kwargs.insert(k, v);
+                        }
+                    }
 
-            let plugin_metadata = PluginMetadata::new(&metadata);
-
-            Ok(utils::PluginMetadata {
-                name: plugin_metadata.get_value("name")?,
-                version: plugin_metadata.get_value("version").unwrap_or("v0.0.0".to_string()),
-                description: plugin_metadata.get_value("description")?,
-                remaining,
-            })
-        });
-
-        return result;
-    }
-
-    pub fn init(&self, args: &[String]) -> anyhow::Result<Vec<utils::ExecutionContext>> {
-        let (_plugin, config) = self.create_interpreter()?;
-        
-        let result = Python::with_gil(|py| {
-            let config = config.extract::<&PyDict>(py)?;
-            let args_list = PyList::empty(py);
-            for arg in args {
-                args_list.append(arg).unwrap();
+                    let task = TaskRequest::with_kwargs(target, kwargs);
+                    yields.push(YieldValue::Task(task));
+                } else {
+                    utils::debug(&format!("Unknown yielded type: {:?}", item));
+                }
             }
 
-            let init_func = match config.get_item("init") {
-                Ok(init_func) => init_func.unwrap(),
-                Err(e) => {
-                    utils::debug(&format!("Failed to get init function: {}", e));
-                    return Err(anyhow::anyhow!(e));
-                },
-            };
-
-            let result = match init_func.call((args_list,), None) {
-                Ok(value) => value,
-                Err(e) => {
-                    utils::debug(&format!("Failed to call init function: {}", e));
-                    return Err(anyhow::anyhow!(e));
-                },
-            };
-
-            utils::debug(&format!("Init function returned: {:?}", result));
-
-            if let Ok(initial_data) = result.extract::<&PyList>() {
-                Ok(initial_data.into_iter().map(|value| utils::ExecutionContext::new(value.into())).collect())
-            } else {
-                Err(anyhow::anyhow!("Init function execution failed"))
-            }
-        });
-
-        return result;
-    }
-
-    pub fn collect_data(&self, data: &utils::ExecutionContext) -> anyhow::Result<Vec<utils::ExecutionContext>> {
-        let (_, config) = self.create_interpreter()?;
-        
-        let result = Python::with_gil(|py| {
-            let config = config.extract::<&PyDict>(py)?;
-            let collect_data_func = match config.get_item("collect_data") {
-                Ok(collect_data_func) => collect_data_func.unwrap(),
-                Err(e) => {
-                    utils::debug(&format!("Failed to get collect_data function: {}", e));
-                    return Err(anyhow::anyhow!(e));
-                },
-            };
-            
-            let result = match collect_data_func.call((data.as_pyobject(),), None) {
-                Ok(value) => value,
-                Err(e) => {
-                    utils::debug(&format!("Failed to call collect_data function: {}", e));
-                    return Err(anyhow::anyhow!(e));
-                },
-            };
-
-            if let Ok(collected_data) = result.extract::<&PyList>() {
-                Ok(collected_data.into_iter().map(|value| utils::ExecutionContext::new(value.into())).collect())
-            } else {
-                Err(anyhow::anyhow!("Collect data function returned a non-list value"))
-            }
-        });
-
-        return result;
-    }
-    
-    pub fn process_data(&self, data: &utils::ExecutionContext) -> anyhow::Result<utils::ProcessingResult> {
-        let (_, config) = self.create_interpreter()?;
-        
-        let result = Python::with_gil(|py| {
-            let config = config.extract::<&PyDict>(py)?;
-            let process_data_func = match config.get_item("process_data") {
-                Ok(process_data_func) => process_data_func.unwrap(),
-                Err(e) => {
-                    utils::debug(&format!("Failed to get process_data function: {}", e));
-                    return Err(anyhow::anyhow!(e));
-                },
-            };
-
-            let result = match process_data_func.call((data.as_pyobject(),), None) {
-                Ok(value) => value,
-                Err(e) => {
-                    utils::debug(&format!("Failed to call process_data function: {}", e));
-                    return Err(anyhow::anyhow!(e));
-                },
-            };
-
-            if let Ok(processed_data) = result.extract::<&PyDict>() {
-                let keys = processed_data.keys().into_iter().map(|key| key.extract::<&PyString>().unwrap().to_string()).collect();
-                let values = processed_data.values().into_iter().map(|value| value.extract::<&PyString>().unwrap().to_string()).collect();
-                Ok(utils::ProcessingResult::new(keys, values))
-            } else {
-                Err(anyhow::anyhow!("Process data function returned a non-dict value"))
-            }
-        });
-
-        return result;
+            Ok(yields)
+        })
     }
 }
 
 impl Default for Plugin {
     fn default() -> Self {
-        Self::new("".to_string(), "".to_string())
+        Self::new(String::new(), String::new())
     }
 }

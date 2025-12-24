@@ -5,7 +5,7 @@ edition = "2024"
 build = "src/build.rs"
 
 [dependencies]
-pyo3 = { version = "0.20", features = ["auto-initialize"] }
+pyo3 = { version = "0.20", features = ["auto-initialize", "abi3-py38"] }
 lazy_static = "1.4"
 clap = { version = "4.5.35", features = ["derive"] }
 anyhow = "1.0.97"

@@ -1,67 +1,104 @@
+"""YARA filesystem scanner - recursively scans directories with YARA rules."""
+
 import os
-import yara
-import argparse
 
-class YaraContext:
-    def __init__(self, directory, rules):
-        self.directory = directory
-        self.rules = rules
-        self.files = []
+from valradar.sdk import Module, Option, Result, Task
 
-    def collect(self):
-        directories = []
+# YARA import is optional - fail gracefully if not installed
+try:
+    import yara
+    YARA_AVAILABLE = True
+except ImportError:
+    YARA_AVAILABLE = False
+
+
+class YaraScanner(Module):
+    """Recursively scans a filesystem directory with YARA rules."""
+
+    name = "YARA Filesystem Scanner"
+    description = "Deeply scan a filesystem with YARA rules"
+    author = "Mainasara Tsowa <tsowamainasara@gmail.com>"
+    version = "0.1.0"
+    options = [
+        Option("directory", type="str", required=True, help="Directory to scan"),
+        Option("rules_file", type="str", required=True, help="Path to YARA rules file"),
+    ]
+
+    def setup(self):
+        """Initialize the YARA rules compiler."""
+        if not YARA_AVAILABLE:
+            raise ImportError("yara-python is required for this module. Install with: pip install yara-python")
+        self.rules = None
+        self.rules_file = None
+
+    def run(self, target: str, **kwargs):
+        """
+        Scan a directory for YARA rule matches.
+
+        Args:
+            target: Directory path to scan
+            **kwargs: May contain 'rules_file' path
+
+        Yields:
+            Result: When YARA rules match files in the directory
+            Task: For each subdirectory found
+        """
+        # Load rules if not already loaded
+        rules_file = kwargs.get('rules_file', self.rules_file)
+        if rules_file and self.rules is None:
+            try:
+                self.rules = yara.compile(rules_file)
+                self.rules_file = rules_file
+            except Exception as e:
+                return
+
+        if self.rules is None:
+            return
+
+        # Ensure target is a valid directory
+        if not os.path.isdir(target):
+            return
 
         try:
-            for file in os.listdir(self.directory):
-                if os.path.isfile(os.path.join(self.directory, file)):
-                    self.files.append(os.path.join(self.directory, file))
-                elif os.path.isdir(os.path.join(self.directory, file)):
-                    directories.append(os.path.join(self.directory, file))
-        except Exception as e:
-            return []
+            entries = os.listdir(target)
+        except (PermissionError, OSError):
+            return
 
-        return [YaraContext(directory, self.rules) for directory in directories]
+        # Collect files and subdirectories
+        files = []
+        subdirs = []
 
-    def process(self):
+        for entry in entries:
+            full_path = os.path.join(target, entry)
+            if os.path.isfile(full_path):
+                files.append(full_path)
+            elif os.path.isdir(full_path):
+                subdirs.append(full_path)
+
+        # Scan files in this directory
         rule_matches = []
-        for file in self.files:
-            content = open(file, "rb").read()
-            matches = self.rules.match(data=content)
-            if matches:
-                rule_matches.append(f'{os.path.basename(file)}: {", ".join([match.rule for match in matches])}')
+        for file_path in files:
+            try:
+                with open(file_path, "rb") as f:
+                    content = f.read()
+                matches = self.rules.match(data=content)
+                if matches:
+                    match_names = ", ".join(m.rule for m in matches)
+                    rule_matches.append(f"{os.path.basename(file_path)}: {match_names}")
+            except (PermissionError, OSError, IOError):
+                continue
 
-        if len(rule_matches) > 0:
-            return {"directory": self.directory, "matches": ', '.join(rule_matches)}
-        else:
-            return None
+        # Yield results if matches found
+        if rule_matches:
+            yield Result(
+                host=target,
+                data={"matches": ", ".join(rule_matches)}
+            )
+
+        # Yield tasks for subdirectories
+        for subdir in subdirs:
+            yield Task(target=subdir, kwargs={'rules_file': self.rules_file})
 
 
-def _YARA_INIT(args):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--directory", type=str, required=True)
-    parser.add_argument("--rules_file", type=str, required=True)
-    args = parser.parse_args(args)
-    rules = yara.compile(args.rules_file)
-    return [YaraContext(args.directory, rules)]
-
-def _YARA_COLLECT_DATA(context):
-    return context.collect()
-
-def _YARA_PROCESS_DATA(context):
-    return context.process()
-
-VALRADAR_CONFIG = {
-    "init": _YARA_INIT,
-    "collect_data": _YARA_COLLECT_DATA,
-    "process_data": _YARA_PROCESS_DATA,
-    "metadata": {
-        "name": "YARA Filesystem Scanner",
-        "description": "Deeply scan a filesystem with YARA rules",
-        "version": "0.0.1",
-        "tags": ["malware", "analysis", "yara", "forensics"],
-        "author": "Mainasara Tsowa <tsowamainasara@gmail.com>",
-        "license": "MIT",
-        "url": "https://github.com/neutrino2211/valradar/blob/dev/modules/forensics/yara-fs.py",
-        "dependencies": ["yara-python"]
-    }
-}
+# Export for Rust loader
+MODULE_CLASS = YaraScanner

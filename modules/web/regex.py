@@ -1,86 +1,99 @@
-import requests
-import bs4
+"""Regex pattern scanner - searches web pages for custom regex patterns."""
+
 import re
-import argparse
+from urllib.parse import urljoin, urlparse
 
-headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-}
+import requests
+from bs4 import BeautifulSoup
 
-class DataContext:
-    def __init__(self, url, types, processed_urls = []):
-        self.url = url if url.endswith("/") else url + "/"
-        self.data = {}
-        self.processed_urls = processed_urls
-        self.types = types
-        self.types_result = {}
+from valradar.sdk import Module, Option, Result, Task
 
-    def collect(self):
-        # Do some work and store state
-        if not self.url.startswith('http'):
-            return []
 
-        if self.url in self.processed_urls:
-            return []
+class RegexScanner(Module):
+    """Scans web pages for custom regex patterns and crawls links."""
 
-        self.data['content'] = requests.get(self.url, headers=headers).text
-        for k in self.types.keys():
-            self.types_result[k] = re.findall(self.types[k], self.data['content'])
+    name = "Regex Scanner"
+    description = "Search web pages for custom regex patterns"
+    author = "Mainasara Tsowa <tsowamainasara@gmail.com>"
+    version = "0.1.0"
+    options = [
+        Option(
+            "pattern",
+            type="str",
+            required=False,
+            help="Regex pattern to search for (name=pattern format)",
+        ),
+    ]
 
-        return [DataContext(link, self.types, self.processed_urls) for link in self.extract_links()]
+    def setup(self):
+        """Initialize the HTTP session and pattern storage."""
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            }
+        )
+        # Default patterns - can be extended via CLI
+        self.patterns = {}
 
-    def extract_links(self):
-        if self.url in self.processed_urls:
-            return []
+    def run(self, target: str, **kwargs):
+        """
+        Scan a URL for regex patterns and yield new links to crawl.
 
-        self.processed_urls.append(self.url)
+        Args:
+            target: URL to scan
+            **kwargs: May contain 'pattern' in format 'name=regex'
 
-        soup = bs4.BeautifulSoup(self.data['content'], 'html.parser')
-        hrefs = []
-        for link in soup.find_all('a'):
-            href = link.get('href')
-            if href:
-                if href.startswith('/') or href.startswith("#"):
-                    hrefs.append(self.url + href)
-                else:
-                    hrefs.append(href)
-        return hrefs
+        Yields:
+            Result: When patterns are matched
+            Task: For each link found on the page
+        """
+        # Parse patterns from kwargs if provided
+        if "pattern" in kwargs and kwargs["pattern"]:
+            pattern_str = kwargs["pattern"]
+            if "=" in pattern_str:
+                name, regex = pattern_str.split("=", 1)
+                self.patterns[name] = regex
 
-    def process(self):
-        if len(self.types_result.keys()) > 0:
-            d = {"url": self.url[:80] }
-            for k in self.types_result.keys():
-                d[k] = ', '.join(self.types_result[k])
-            return d
-        else:
-            return None
+        # Normalize URL
+        if not target.startswith(("http://", "https://")):
+            target = "https://" + target
 
-def _VALRADAR_INIT(args):
-    parser = argparse.ArgumentParser("web.regex", description="D")
-    parser.add_argument("url", help="The url to initiate scraping on")
-    parser.add_argument("-t", "--type", help="A mapping of a type to a regex that matches it -t letters='[a-zA-Z]'", action="append", default=[])
-    args = parser.parse_args(args)
-    types_dict = { a.split("=")[0]:a.split("=")[1] for a in args.type }
-    return [DataContext(args.url, types_dict)]
+        try:
+            response = self.session.get(target, timeout=10)
+            response.raise_for_status()
+        except requests.RequestException:
+            return
 
-def _VALRADAR_COLLECT_DATA(context):
-    return context.collect()
+        # Search for patterns
+        matches = {}
+        for name, pattern in self.patterns.items():
+            found = list(set(re.findall(pattern, response.text)))
+            if found:
+                matches[name] = ", ".join(found[:10])  # Limit to first 10 matches
 
-def _VALRADAR_PROCESS_DATA(context):
-    return context.process()
+        if matches:
+            yield Result(host=target[:80], data=matches)
 
-VALRADAR_CONFIG = {
-    "init": _VALRADAR_INIT,
-    "collect_data": _VALRADAR_COLLECT_DATA,
-    "process_data": _VALRADAR_PROCESS_DATA,
-    "metadata": {
-        "name": "Email Scraper",
-        "description": "Extract emails from a website",
-        "version": "0.0.1",
-        "tags": ["email", "scraping", "web"],
-        "author": "Mainasara Tsowa <tsowamainasara@gmail.com>",
-        "license": "MIT",
-        "url": "https://github.com/neutrino2211/valradar/blob/dev/modules/web/emails.py",
-        "dependencies": ["requests", "bs4"]
-    }
-}
+        # Extract and yield links for crawling
+        base_domain = urlparse(target).netloc
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        for link in soup.find_all("a", href=True):
+            href = link["href"]
+
+            if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                continue
+
+            full_url = urljoin(target, href)
+            link_domain = urlparse(full_url).netloc
+
+            if link_domain == base_domain:
+                # Pass the pattern along to child tasks
+                yield Task(target=full_url, kwargs=kwargs)
+
+
+# Export for Rust loader
+MODULE_CLASS = RegexScanner

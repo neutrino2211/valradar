@@ -1,10 +1,13 @@
 use std::fmt;
 
+use crate::plugin::OptionInfo;
+
 /// Metadata for a plugin
 pub struct PluginMetadata {
     pub name: String,
     pub version: String,
     pub description: String,
+    pub options: Vec<OptionInfo>,
     pub remaining: Vec<(String, String)>,
 }
 
@@ -14,6 +17,7 @@ impl Default for PluginMetadata {
             name: "".to_string(),
             version: "".to_string(),
             description: "".to_string(),
+            options: vec![],
             remaining: vec![],
         }
     }
