@@ -1,8 +1,7 @@
-use std::env;
-use std::time::Duration;
-use indicatif::{ProgressBar, ProgressStyle};
-use clap::{Parser, command};
-use valradar::{Plugin, Orchestrator, utils};
+mod commands;
+
+use clap::{Parser, Subcommand};
+use valradar::utils;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -13,26 +12,73 @@ use valradar::{Plugin, Orchestrator, utils};
     long_about = "Valradar is a high-performance, low-latency, and scalable data processing framework designed for OSINT, RECON, and a wide range of operations. It provides a flexible plugin architecture that allows you to create custom data collection and processing pipelines."
 )]
 struct Args {
-    #[arg(short = '!', long, long_help = "Enable debug mode", default_value = "false")]
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    // Legacy flags for backward compatibility with `valradar <plugin>`
+    #[arg(short = '!', long, long_help = "Enable debug mode", default_value = "false", global = true)]
     debug: bool,
-
-    #[arg(short = 'd', long, long_help = "How many recursive calls to make", default_value = "1")]
-    depth: u32,
-
-    #[arg(short = 'c', long, long_help = "How many concurrent threads to use", default_value = "4")]
-    concurrency: u32,
-
-    #[arg(short = 'i', long, long_help = "Show plugin information", default_value = "false")]
-    info: bool,
 
     #[arg(short = 'l', long, long_help = "Show license", default_value = "false")]
     license: bool,
 
-    #[arg(help = "Plugin module name", default_value = "_")]
-    plugin: String,
+    // Allow positional plugin name for backward compatibility
+    #[arg(help = "Plugin module name (legacy usage)", hide = true)]
+    plugin: Option<String>,
 
-    #[arg(help = "Arguments for the plugin", last = true)]
+    #[arg(help = "Arguments for the plugin (legacy usage)", last = true, hide = true)]
     args: Vec<String>,
+}
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// Run a plugin
+    #[command(alias = "r")]
+    Run {
+        /// Plugin module name (e.g., examples.emails)
+        plugin: String,
+
+        #[arg(short = 'd', long, long_help = "How many recursive calls to make", default_value = "1")]
+        depth: u32,
+
+        #[arg(short = 'c', long, long_help = "How many concurrent threads to use", default_value = "4")]
+        concurrency: u32,
+
+        #[arg(short = 'i', long, long_help = "Show plugin information", default_value = "false")]
+        info: bool,
+
+        /// Arguments for the plugin
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+
+    /// Create a new plugin from template
+    #[command(alias = "n")]
+    New {
+        /// Name of the new plugin
+        name: String,
+
+        /// Output path (default: current directory)
+        #[arg(short, long)]
+        path: Option<String>,
+    },
+
+    /// List available plugins
+    #[command(alias = "ls")]
+    List,
+
+    /// Install plugin dependencies
+    #[command(alias = "i")]
+    Install {
+        /// Plugin module name (e.g., examples.emails)
+        plugin: String,
+    },
+
+    /// Validate plugin structure
+    Doctor {
+        /// Plugin module name (e.g., examples.emails)
+        plugin: String,
+    },
 }
 
 fn main() {
@@ -43,116 +89,54 @@ fn main() {
         return;
     }
 
-    if args.plugin == "_" {
-        println!("Plugin module name is required");
-        return;
-    }
-
-    let (plugin_name, plugin_args) = (args.plugin, args.args);
-    let parts = plugin_name.split('.').collect::<Vec<&str>>();
-    let plugin_module_name = match parts.last().cloned() {
-        Some(name) => name,
-        None => "main".into(),
-    };
-    let mut plugin_path = parts.join("/") + ".py";
-    if let Some(path) = utils::module::search_module(&plugin_path) {
-        plugin_path = path;
-    } else {
-        println!("Plugin '{}' not found", plugin_name);
-        return;
-    }
-    let plugin = Plugin::new(plugin_module_name.to_string(), plugin_path.to_string());
-
-    if args.debug {
-        unsafe {
-            env::set_var("VALRADAR_DEBUG", "1");
+    match args.command {
+        Some(Commands::Run { plugin, depth, concurrency, info, args: plugin_args }) => {
+            commands::run::run(&plugin, plugin_args, depth, concurrency, args.debug, info);
         }
-    }
-
-    let metadata = match plugin.get_metadata() {
-        Ok(metadata) => metadata,
-        Err(e) => {
-            println!("Failed to get metadata: {}", e);
-            return;
-        },
-    };
-
-    if args.info {
-        println!("{}", metadata);
-        return;
-    }
-
-    valradar::utils::print_banner(&metadata);
-
-    let bar = ProgressBar::new_spinner();
-    bar.enable_steady_tick(Duration::from_millis(100));
-    bar.set_message("Initializing plugin...");
-
-    // Create and initialize the orchestrator
-    let mut orchestrator = Orchestrator::new(plugin, args.concurrency as usize);
-
-    // Orchestrator depth
-    let mut depth = args.depth;
-    
-    match orchestrator.init(&plugin_args) {
-        Ok(_) => {
-            valradar::utils::debug("Plugin initialized");
-        },
-        Err(e) => {
-            println!("Plugin initialization failed: {}", e);
-            return;
-        },
-    };
-
-    let mut all_results: Vec<utils::ExecutionContext> = vec![];
-
-    while depth > 0 {
-        bar.set_message(format!("Collecting at depth [{}/{}] with {} results collected", args.depth - depth + 1, args.depth, all_results.len()));
-        // Run the orchestrator to process all current data
-        let results = match orchestrator.run() {
-            Ok(results) => {
-                valradar::utils::debug(&format!("Collecting completed with {} results", results.len()));
-                results
-            },
-            Err(e) => {
-                println!("Collecting failed: {}", e);    
-                vec![]
-            }
-        };
-
-        all_results.extend(results.clone());
-        orchestrator.set_data_queue(results.clone());
-
-        // Decrement the depth
-        depth -= 1;
-    }
-
-    bar.set_message(format!("Collected {} results", all_results.len()));
-    bar.set_prefix("✅");
-    bar.finish();
-
-    let plugin = orchestrator.relinquish_plugin();
-
-    let processing_bar = ProgressBar::new(all_results.len().try_into().unwrap());
-    processing_bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:80.cyan/blue} {pos:>7}/{len:7} {msg}")
-        .unwrap()
-        .progress_chars("##-"));
-    processing_bar.set_message("Processing results...");
-
-    let mut processing_results: Vec<utils::ProcessingResult> = vec![];
-    for result in all_results {
-        let processing_result = plugin.process_data(&result);
-        processing_bar.inc(1);
-        match processing_result {
-            Ok(processing_result) => processing_results.push(processing_result),
-            Err(e) => {
-                utils::debug(&format!("Skipped processing result: {}", e));
+        Some(Commands::New { name, path }) => {
+            commands::new::new_plugin(&name, path.as_deref());
+        }
+        Some(Commands::List) => {
+            commands::list::list_plugins();
+        }
+        Some(Commands::Install { plugin }) => {
+            commands::install::install_dependencies(&plugin);
+        }
+        Some(Commands::Doctor { plugin }) => {
+            commands::doctor::doctor(&plugin);
+        }
+        None => {
+            // Legacy mode: if plugin is provided without subcommand
+            if let Some(plugin_name) = args.plugin {
+                if plugin_name == "_" || plugin_name.is_empty() {
+                    // Show help
+                    println!("Usage: valradar <COMMAND>");
+                    println!();
+                    println!("Commands:");
+                    println!("  run      Run a plugin");
+                    println!("  new      Create a new plugin from template");
+                    println!("  list     List available plugins");
+                    println!("  install  Install plugin dependencies");
+                    println!("  doctor   Validate plugin structure");
+                    println!();
+                    println!("Run 'valradar --help' for more information.");
+                } else {
+                    // Legacy: run plugin directly
+                    commands::run::run(&plugin_name, args.args, 1, 4, args.debug, false);
+                }
+            } else {
+                // Show help
+                println!("Usage: valradar <COMMAND>");
+                println!();
+                println!("Commands:");
+                println!("  run      Run a plugin");
+                println!("  new      Create a new plugin from template");
+                println!("  list     List available plugins");
+                println!("  install  Install plugin dependencies");
+                println!("  doctor   Validate plugin structure");
+                println!();
+                println!("Run 'valradar --help' for more information.");
             }
         }
     }
-
-    processing_bar.set_message("Processing completed");
-    processing_bar.finish();
-
-    println!("{}", utils::ProcessedData(processing_results));
 }

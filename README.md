@@ -1,5 +1,8 @@
 # Valradar
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Documentation](https://img.shields.io/badge/docs-mdbook-blue)](https://neutrino2211.github.io/valradar/)
+
 > [!WARNING]  
 > This tool is in early development, although little changes are to be expected proceed with caution.
 
@@ -20,122 +23,93 @@ https://github.com/user-attachments/assets/512fc378-e189-4bb4-b0db-e40f0e857a17
 - **Extensible**: Easy to extend with new plugins and capabilities
 - **Command-line Interface**: Simple CLI for running plugins with various options
 
-## Installation
+## 📚 Documentation
+
+**[Read the full documentation →](https://neutrino2211.github.io/valradar/)**
+
+- [Getting Started](https://neutrino2211.github.io/valradar/getting-started.html)
+- [Writing Plugins](https://neutrino2211.github.io/valradar/writing-plugins.html)
+- [CLI Reference](https://neutrino2211.github.io/valradar/cli-reference.html)
+- [API Reference](https://neutrino2211.github.io/valradar/api-reference.html)
+
+## Quick Start
+
+### Installation
 
 ```bash
+# Build from source
 cargo build --release
+
+# Install Python SDK
+pip install valradar
 ```
 
-## Usage
-
-Run a plugin using the following command:
+### Run a Plugin
 
 ```bash
-cargo run -- -c 4 examples.emails https://example.com
+# Using the run subcommand (recommended)
+valradar run examples.emails https://example.com
+
+# With options
+valradar run -c 8 -d 3 examples.emails https://example.com
 ```
 
-### Command Line Options
+### Create a New Plugin
 
-- `-c, --concurrency`: Number of concurrent worker threads (default: 1)
-- `-d, --depth`: How many recursive calls to make (default: 1)
-- `-!, --debug`: Enable debug mode (default: false)
-- `-i, --info`: Show plugin information (default: false)
-- `plugin`: Plugin module name (e.g., examples.emails)
-- `args`: Arguments for the plugin
+```bash
+valradar new my-plugin
+```
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `valradar run <plugin> [args]` | Run a plugin |
+| `valradar new <name>` | Create a new plugin from template |
+| `valradar list` | List available plugins |
+| `valradar install <plugin>` | Install plugin dependencies |
+| `valradar doctor <plugin>` | Validate plugin structure |
+
+### Options
+
+- `-c, --concurrency`: Number of parallel workers (default: 4)
+- `-d, --depth`: Recursive processing depth (default: 1)
+- `-!, --debug`: Enable debug output
+- `-i, --info`: Show plugin information
 
 ## Creating Plugins
 
-Plugins in Valradar are Python modules that implement a specific interface. Here's how to create one:
-
-### Plugin Structure
-
-A Valradar plugin consists of three main components:
-
-1. A `DataContext` class to manage state
-2. Required plugin functions
-3. Plugin configuration
-
-### Example Plugin
-
-Here's a simplified example of an email extraction plugin:
+Valradar uses a class-based SDK for plugin development:
 
 ```python
-class DataContext:
-    def __init__(self, url):
-        self.url = url
-        self.data = {}
-        self.processed = False
-        self.emails = []
+from valradar import Plugin, Context, to_config
 
-    def collect(self):
-        # Collect data and return new contexts for recursive processing
-        # This method is called for each data item
-        return [DataContext(new_url) for new_url in self.extract_links()]
+class MyPlugin(Plugin):
+    name = "my-plugin"
+    description = "Does something useful"
+    version = "1.0.0"
 
-    def process(self):
-        # Process the collected data
-        # Return None if no results, or a dict with results
-        if len(self.emails) > 0:
-            return {"url": self.url, "emails": self.emails}
-        return None
+    def init(self, args: list[str]) -> list[Context]:
+        return [Context(url=url) for url in args]
 
-# Required plugin functions
-def _VALRADAR_INIT(args):
-    # Initialize plugin with arguments
-    return [DataContext(url) for url in args]
+    def collect(self, ctx: Context) -> list[Context]:
+        response = ctx.fetch(ctx.get("url"))
+        ctx.set("content", response.text)
+        return []
 
-def _VALRADAR_COLLECT_DATA(context):
-    # Collect data from a context
-    return context.collect()
+    def process(self, ctx: Context) -> dict | None:
+        return {"url": ctx.get("url"), "size": len(ctx.get("content", ""))}
 
-def _VALRADAR_PROCESS_DATA(context):
-    # Process data from a context
-    return context.process()
-
-# Plugin configuration
-VALRADAR_CONFIG = {
-    "init": _VALRADAR_INIT,
-    "collect_data": _VALRADAR_COLLECT_DATA,
-    "process_data": _VALRADAR_PROCESS_DATA,
-    "metadata": {
-        "name": "Plugin Name",
-        "description": "Plugin description",
-        "version": "0.1.0",
-    }
-}
+plugin = MyPlugin()
+VALRADAR_CONFIG = to_config(plugin)
 ```
 
-### Required Functions
-
-1. `_VALRADAR_INIT(args)`: 
-   - Initializes the plugin with command-line arguments
-   - Returns a list of initial `DataContext` objects
-
-2. `_VALRADAR_COLLECT_DATA(context)`:
-   - Called for each data item to collect new data
-   - Returns a list of new `DataContext` objects for recursive processing
-
-3. `_VALRADAR_PROCESS_DATA(context)`:
-   - Processes the collected data
-   - Returns None if no results, or a dictionary with results
-
-### DataContext Class
-
-The `DataContext` class is used to maintain state during processing. It is not required but the concept is very useful for passing around context between each call to the collection and processing functions as those functions would not be able to share data otherwise
-
-### Plugin Configuration
-
-The `VALRADAR_CONFIG` dictionary defines the plugin's interface and metadata:
-
-- `init`: Initialization function
-- `collect_data`: Data collection function
-- `process_data`: Data processing function
-- `metadata`: Plugin metadata including name, description, dependencies, etc.
+See the [Writing Plugins](https://neutrino2211.github.io/valradar/writing-plugins.html) guide for more details.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please see our [Contributing Guide](https://neutrino2211.github.io/valradar/contributing.html) for details.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -6,8 +6,10 @@ use pyo3::types::{PyDict, PyList, PyString};
 use pyo3::PyObject;
 
 use crate::utils;
+use crate::utils::{format_python_error, get_python_type_name, PluginValidationError};
 
 const IGNORE_KEYS: [&str; 3] = ["name", "description", "version"];
+const REQUIRED_CONFIG_KEYS: [&str; 3] = ["init", "collect_data", "process_data"];
 
 struct PluginMetadata<'a>(&'a PyDict);
 
@@ -35,7 +37,7 @@ pub struct Plugin {
 
 impl Plugin {
     fn get_existing_python_paths(py: Python<'_>) -> anyhow::Result<&PyList> {
-        let mut python_command =Command::new("python")
+        let mut python_command = Command::new("python")
             .arg("-c")
             .arg("import sys; print(sys.path)")
             .output();
@@ -77,11 +79,38 @@ impl Plugin {
             let _ = sys.setattr("path", existing_paths);
             utils::debug(&format!("Sys path: {:?}", sys.getattr("path")?));
             
-            let plugin = PyModule::from_code(py, &self.code, &self.path, plugin_name.to_str().unwrap())?;
-            let config = plugin.getattr("VALRADAR_CONFIG")?;
+            // Load the plugin module with better error handling
+            let plugin = match PyModule::from_code(py, &self.code, &self.path, plugin_name.to_str().unwrap()) {
+                Ok(plugin) => plugin,
+                Err(e) => {
+                    let error_msg = format_python_error(py, &e);
+                    return Err(anyhow::anyhow!("Failed to load plugin:\n{}", error_msg));
+                }
+            };
+            
+            // Check for VALRADAR_CONFIG with helpful error message
+            let config = match plugin.getattr("VALRADAR_CONFIG") {
+                Ok(config) => config,
+                Err(_) => {
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::MissingConfig));
+                }
+            };
             
             Ok((plugin.into(), config.into()))
         })
+    }
+
+    /// Validates that VALRADAR_CONFIG has all required keys
+    fn validate_config(&self, _py: Python<'_>, config: &PyDict) -> anyhow::Result<()> {
+        for key in REQUIRED_CONFIG_KEYS.iter() {
+            match config.get_item(*key) {
+                Ok(Some(_)) => continue,
+                Ok(None) | Err(_) => {
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::MissingConfigKey(key.to_string())));
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn get_metadata(&self) -> anyhow::Result<utils::PluginMetadata> {
@@ -145,25 +174,44 @@ impl Plugin {
         let (_plugin, config) = self.create_interpreter()?;
         
         let result = Python::with_gil(|py| {
-            let config = config.extract::<&PyDict>(py)?;
+            let config = match config.extract::<&PyDict>(py) {
+                Ok(config) => config,
+                Err(_) => {
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::ConfigNotDict));
+                }
+            };
+            
+            // Validate config has all required keys
+            self.validate_config(py, config)?;
+            
             let args_list = PyList::empty(py);
             for arg in args {
                 args_list.append(arg).unwrap();
             }
 
             let init_func = match config.get_item("init") {
-                Ok(init_func) => init_func.unwrap(),
+                Ok(Some(func)) => func,
+                Ok(None) => {
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::MissingConfigKey("init".to_string())));
+                }
                 Err(e) => {
-                    utils::debug(&format!("Failed to get init function: {}", e));
-                    return Err(anyhow::anyhow!(e));
+                    let error_msg = format_python_error(py, &e);
+                    utils::debug(&format!("Failed to get init function: {}", error_msg));
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::FunctionCallFailed {
+                        function: "init".to_string(),
+                        error: error_msg,
+                    }));
                 },
             };
 
             let result = match init_func.call((args_list,), None) {
                 Ok(value) => value,
                 Err(e) => {
-                    utils::debug(&format!("Failed to call init function: {}", e));
-                    return Err(anyhow::anyhow!(e));
+                    let error_msg = format_python_error(py, &e);
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::FunctionCallFailed {
+                        function: "init".to_string(),
+                        error: error_msg,
+                    }));
                 },
             };
 
@@ -172,7 +220,12 @@ impl Plugin {
             if let Ok(initial_data) = result.extract::<&PyList>() {
                 Ok(initial_data.into_iter().map(|value| utils::ExecutionContext::new(value.into())).collect())
             } else {
-                Err(anyhow::anyhow!("Init function execution failed"))
+                let got_type = get_python_type_name(py, result);
+                Err(anyhow::anyhow!("{}", PluginValidationError::WrongReturnType {
+                    function: "init".to_string(),
+                    expected: "list".to_string(),
+                    got: got_type,
+                }))
             }
         });
 
@@ -183,27 +236,48 @@ impl Plugin {
         let (_, config) = self.create_interpreter()?;
         
         let result = Python::with_gil(|py| {
-            let config = config.extract::<&PyDict>(py)?;
+            let config = match config.extract::<&PyDict>(py) {
+                Ok(config) => config,
+                Err(_) => {
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::ConfigNotDict));
+                }
+            };
+            
             let collect_data_func = match config.get_item("collect_data") {
-                Ok(collect_data_func) => collect_data_func.unwrap(),
+                Ok(Some(func)) => func,
+                Ok(None) => {
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::MissingConfigKey("collect_data".to_string())));
+                }
                 Err(e) => {
-                    utils::debug(&format!("Failed to get collect_data function: {}", e));
-                    return Err(anyhow::anyhow!(e));
+                    let error_msg = format_python_error(py, &e);
+                    utils::debug(&format!("Failed to get collect_data function: {}", error_msg));
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::FunctionCallFailed {
+                        function: "collect_data".to_string(),
+                        error: error_msg,
+                    }));
                 },
             };
             
             let result = match collect_data_func.call((data.as_pyobject(),), None) {
                 Ok(value) => value,
                 Err(e) => {
-                    utils::debug(&format!("Failed to call collect_data function: {}", e));
-                    return Err(anyhow::anyhow!(e));
+                    let error_msg = format_python_error(py, &e);
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::FunctionCallFailed {
+                        function: "collect_data".to_string(),
+                        error: error_msg,
+                    }));
                 },
             };
 
             if let Ok(collected_data) = result.extract::<&PyList>() {
                 Ok(collected_data.into_iter().map(|value| utils::ExecutionContext::new(value.into())).collect())
             } else {
-                Err(anyhow::anyhow!("Collect data function returned a non-list value"))
+                let got_type = get_python_type_name(py, result);
+                Err(anyhow::anyhow!("{}", PluginValidationError::WrongReturnType {
+                    function: "collect_data".to_string(),
+                    expected: "list".to_string(),
+                    got: got_type,
+                }))
             }
         });
 
@@ -214,20 +288,36 @@ impl Plugin {
         let (_, config) = self.create_interpreter()?;
         
         let result = Python::with_gil(|py| {
-            let config = config.extract::<&PyDict>(py)?;
+            let config = match config.extract::<&PyDict>(py) {
+                Ok(config) => config,
+                Err(_) => {
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::ConfigNotDict));
+                }
+            };
+            
             let process_data_func = match config.get_item("process_data") {
-                Ok(process_data_func) => process_data_func.unwrap(),
+                Ok(Some(func)) => func,
+                Ok(None) => {
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::MissingConfigKey("process_data".to_string())));
+                }
                 Err(e) => {
-                    utils::debug(&format!("Failed to get process_data function: {}", e));
-                    return Err(anyhow::anyhow!(e));
+                    let error_msg = format_python_error(py, &e);
+                    utils::debug(&format!("Failed to get process_data function: {}", error_msg));
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::FunctionCallFailed {
+                        function: "process_data".to_string(),
+                        error: error_msg,
+                    }));
                 },
             };
 
             let result = match process_data_func.call((data.as_pyobject(),), None) {
                 Ok(value) => value,
                 Err(e) => {
-                    utils::debug(&format!("Failed to call process_data function: {}", e));
-                    return Err(anyhow::anyhow!(e));
+                    let error_msg = format_python_error(py, &e);
+                    return Err(anyhow::anyhow!("{}", PluginValidationError::FunctionCallFailed {
+                        function: "process_data".to_string(),
+                        error: error_msg,
+                    }));
                 },
             };
 
@@ -236,7 +326,12 @@ impl Plugin {
                 let values = processed_data.values().into_iter().map(|value| value.extract::<&PyString>().unwrap().to_string()).collect();
                 Ok(utils::ProcessingResult::new(keys, values))
             } else {
-                Err(anyhow::anyhow!("Process data function returned a non-dict value"))
+                let got_type = get_python_type_name(py, result);
+                Err(anyhow::anyhow!("{}", PluginValidationError::WrongReturnType {
+                    function: "process_data".to_string(),
+                    expected: "dict".to_string(),
+                    got: got_type,
+                }))
             }
         });
 
