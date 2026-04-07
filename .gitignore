@@ -1,4 +1,4 @@
 /target
 .venv
 .DS_Store
-experiments/manual-llm-osint.py
+experiments/manual-llm-osint.py__pycache__/
