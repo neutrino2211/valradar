@@ -20,7 +20,7 @@ class RegexScanner(Module):
         Option(
             "pattern",
             type="str",
-            required=False,
+            required=True,
             help="Regex pattern to search for (name=pattern format)",
         ),
     ]

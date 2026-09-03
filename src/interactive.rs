@@ -16,11 +16,11 @@ use rustyline::history::DefaultHistory;
 use rustyline::validate::Validator;
 use rustyline::{Context, Editor, Helper};
 
-use crate::commands::{parse_command, Command};
-use crate::plugin::Plugin;
-use crate::utils::module::{list_modules, search_module, ModuleEntry};
-use crate::utils::{debug, PluginInstance};
 use crate::Orchestrator;
+use crate::commands::{Command, parse_command};
+use crate::plugin::Plugin;
+use crate::utils::module::{ModuleEntry, list_modules, search_module};
+use crate::utils::{PluginInstance, debug};
 
 /// Interactive session context
 struct InteractiveContext {
@@ -563,8 +563,5 @@ Examples:
 
 fn cmd_clear() {
     let _ = execute!(std::io::stdout(), terminal::Clear(terminal::ClearType::All));
-    let _ = execute!(
-        std::io::stdout(),
-        crossterm::cursor::MoveTo(0, 0)
-    );
+    let _ = execute!(std::io::stdout(), crossterm::cursor::MoveTo(0, 0));
 }
